@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentRequest, markPaymentComplete } from "@/lib/payment";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+
+async function sendPushNotification(token: string, amount: number | null, label: string) {
+  await fetch("https://exp.host/--/api/v2/push/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: token,
+      title: "Payment Received!",
+      body: `${amount ? `${amount} SOL` : "Payment"} received${label ? ` for ${label}` : ""}`,
+      sound: "default",
+    }),
+  });
+}
 
 export async function GET(
   req: NextRequest,
@@ -22,7 +37,6 @@ export async function GET(
       return NextResponse.json({ error: "RPC not configured" }, { status: 500 });
     }
 
-    // Get signatures for the recipient wallet
     const res = await fetch(rpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -38,7 +52,6 @@ export async function GET(
     const signatures = data.result || [];
 
     for (const sig of signatures) {
-      // Get transaction details
       const txRes = await fetch(rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,14 +67,24 @@ export async function GET(
       const tx = txData.result;
       if (!tx) continue;
 
-      // Check if reference key is in the transaction accounts
       const accounts = tx.transaction?.message?.accountKeys || [];
-      const hasReference = accounts.some(
-        (a: any) => a.pubkey === slug
-      );
+      const hasReference = accounts.some((a: any) => a.pubkey === slug);
 
       if (hasReference) {
-        await markPaymentComplete(slug, accounts[0]?.pubkey || "unknown", sig.signature);
+        const paidBy = accounts[0]?.pubkey || "unknown";
+        await markPaymentComplete(slug, paidBy, sig.signature);
+
+        // Send push notification to merchant
+        try {
+          const userSnap = await getDoc(doc(db, "chatfi_users", payment.walletAddress));
+          const userData = userSnap.data();
+          if (userData?.expoPushToken) {
+            await sendPushNotification(userData.expoPushToken, payment.amount, payment.label);
+          }
+        } catch (e) {
+          console.error("Push notification failed:", e);
+        }
+
         return NextResponse.json({ status: "completed", txSignature: sig.signature });
       }
     }
