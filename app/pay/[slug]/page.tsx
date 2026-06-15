@@ -39,11 +39,7 @@ export default async function PayPage({ params }: Props) {
           </div>
         ) : (
           <>
-            <QRDisplay
-              link={link}
-              amount={payment.amount}
-              label={payment.label}
-            />
+            <QRDisplay link={link} />
             <div className="border-t border-[#2A2A2A] pt-4">
               <PayButton
                 paymentId={slug}

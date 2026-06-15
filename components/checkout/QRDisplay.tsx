@@ -4,11 +4,9 @@ import { Copy, Check } from "lucide-react";
 
 interface QRDisplayProps {
   link: string;
-  amount: number | null;
-  label: string;
 }
 
-const QRDisplay = ({ link, amount, label }: QRDisplayProps) => {
+const QRDisplay = ({ link }: QRDisplayProps) => {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -17,15 +15,11 @@ const QRDisplay = ({ link, amount, label }: QRDisplayProps) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}&color=AAFF00&bgcolor=0F0F0F`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}&color=AAFF00&bgcolor=141414`;
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
-      {label && <p className="text-white font-semibold text-lg">{label}</p>}
-      {amount && (
-        <p className="text-[#AAFF00] text-3xl font-bold">{amount} SOL</p>
-      )}
-      <div className="border border-[#AAFF00] rounded-2xl p-4 bg-[#0F0F0F]">
+      <div className="border border-[#AAFF00] rounded-2xl p-4 bg-[#141414]">
         <img src={qrUrl} alt="QR Code" width={200} height={200} />
       </div>
       <p className="text-gray-500 text-xs text-center break-all px-4">{link}</p>
