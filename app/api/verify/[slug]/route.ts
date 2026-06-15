@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentRequest, markPaymentComplete } from "@/lib/payment";
 import { db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 
 async function sendPushNotification(token: string, amount: number | null, label: string) {
   await fetch("https://exp.host/--/api/v2/push/send", {
@@ -14,6 +15,54 @@ async function sendPushNotification(token: string, amount: number | null, label:
       sound: "default",
     }),
   });
+}
+
+async function fireWebhook(webhookUrl: string, payment: any, txSignature: string) {
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: "payment.confirmed",
+        id: payment.id,
+        amount: payment.amount,
+        label: payment.label,
+        memo: payment.memo,
+        walletAddress: payment.walletAddress,
+        txSignature,
+        paidAt: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    console.error("Webhook failed:", e);
+  }
+}
+
+async function getMerchantData(walletAddress: string) {
+  try {
+    const snap = await getDoc(doc(db, "merchants", walletAddress));
+    if (snap.exists()) return snap.data();
+  } catch (e) {}
+  return null;
+}
+
+async function updateMerchantStats(walletAddress: string, amount: number | null) {
+  try {
+    const snap = await getDoc(doc(db, "merchants", walletAddress));
+    if (snap.exists()) {
+      const data = snap.data();
+      const stats = data.stats || { total: 0, completed: 0, pending: 0, volume: 0 };
+      await updateDoc(doc(db, "merchants", walletAddress), {
+        stats: {
+          ...stats,
+          completed: (stats.completed || 0) + 1,
+          volume: (stats.volume || 0) + (amount || 0),
+        }
+      });
+    }
+  } catch (e) {
+    console.error("Stats update failed:", e);
+  }
 }
 
 export async function GET(
@@ -74,16 +123,28 @@ export async function GET(
         const paidBy = accounts[0]?.pubkey || "unknown";
         await markPaymentComplete(slug, paidBy, sig.signature);
 
-        // Send push notification to merchant
-        try {
-          const userSnap = await getDoc(doc(db, "chatfi_users", payment.walletAddress));
-          const userData = userSnap.data();
-          if (userData?.expoPushToken) {
-            await sendPushNotification(userData.expoPushToken, payment.amount, payment.label);
-          }
-        } catch (e) {
-          console.error("Push notification failed:", e);
+        const merchant = await getMerchantData(payment.walletAddress);
+
+        // Push notification
+        if (merchant?.expoPushToken) {
+          await sendPushNotification(merchant.expoPushToken, payment.amount, payment.label);
+        } else {
+          try {
+            const userSnap = await getDoc(doc(db, "chatfi_users", payment.walletAddress));
+            const userData = userSnap.data();
+            if (userData?.expoPushToken) {
+              await sendPushNotification(userData.expoPushToken, payment.amount, payment.label);
+            }
+          } catch (e) {}
         }
+
+        // Fire webhook
+        if (merchant?.webhookUrl) {
+          await fireWebhook(merchant.webhookUrl, payment, sig.signature);
+        }
+
+        // Update merchant stats
+        await updateMerchantStats(payment.walletAddress, payment.amount);
 
         return NextResponse.json({ status: "completed", txSignature: sig.signature });
       }
