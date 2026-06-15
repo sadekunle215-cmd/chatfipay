@@ -4,14 +4,15 @@ import PayButton from "@/components/checkout/PayButton";
 import { notFound } from "next/navigation";
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export default async function PayPage({ params }: Props) {
-  const payment = await getPaymentRequest(params.slug);
+  const { slug } = await params;
+  const payment = await getPaymentRequest(slug);
   if (!payment) return notFound();
 
-  const link = `https://chatfipay.pro/pay/${params.slug}`;
+  const link = `https://chatfipay-z9xh.vercel.app/pay/${slug}`;
 
   return (
     <main className="min-h-screen bg-[#0F0F0F] flex flex-col items-center justify-center px-4 py-12">
@@ -45,7 +46,7 @@ export default async function PayPage({ params }: Props) {
             />
             <div className="border-t border-[#2A2A2A] pt-4">
               <PayButton
-                paymentId={params.slug}
+                paymentId={slug}
                 walletAddress={payment.walletAddress}
                 amount={payment.amount}
                 label={payment.label}
