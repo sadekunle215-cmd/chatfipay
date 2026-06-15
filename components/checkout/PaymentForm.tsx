@@ -28,7 +28,7 @@ const PaymentForm = ({ walletAddress }: PaymentFormProps) => {
         label,
         memo
       );
-      router.push(\`/pay/${id}\`);
+      router.push(`/pay/${id}`);
     } catch (e) {
       setError("Failed to create payment link. Try again.");
     } finally {
