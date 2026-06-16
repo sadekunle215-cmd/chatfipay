@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
         status: "pending",
         createdAt: new Date().toISOString(),
         source: "api",
+        apiKey: apiKey,
       })
     );
 
