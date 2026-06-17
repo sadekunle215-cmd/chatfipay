@@ -19,10 +19,10 @@ const ManualPay = ({ walletAddress, amount }: Props) => {
   const [solPrice, setSolPrice] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch("https://api.jup.ag/price/v2?ids=So11111111111111111111111111111111111111112")
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd")
       .then(r => r.json())
       .then(d => {
-        const price = d?.data?.["So11111111111111111111111111111111111111112"]?.price;
+        const price = d?.solana?.usd;
         if (price) setSolPrice(parseFloat(price));
       })
       .catch(() => {});
