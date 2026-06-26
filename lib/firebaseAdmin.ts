@@ -1,21 +1,19 @@
-import admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 
-const apps = admin.apps;
-
-if (!apps.length) {
+function getApp() {
+  if (admin.apps.length > 0) {
+    return admin.apps[0]!;
+  }
   const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
     ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
     : null;
-
-  if (serviceAccount) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-  } else {
-    admin.initializeApp();
-  }
+  return admin.initializeApp(
+    serviceAccount ? { credential: admin.credential.cert(serviceAccount) } : undefined
+  );
 }
 
-export const db = admin.firestore();
-export const auth = admin.auth();
+const app = getApp();
+
+export const db = admin.firestore(app);
+export const auth = admin.auth(app);
 export default admin;
