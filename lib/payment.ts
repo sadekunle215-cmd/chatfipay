@@ -1,4 +1,5 @@
 import { db } from "./firebase";
+import { db as adminDb } from "./firebaseAdmin";
 import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { nanoid } from "nanoid";
 
@@ -36,10 +37,10 @@ export async function createPaymentRequest(
 }
 
 export async function getPaymentRequest(id: string): Promise<PaymentRequest | null> {
-  // Try pay_links first (store checkout), then fall back to payments (direct pay links)
-  const payLinkSnap = await getDoc(doc(db, "pay_links", id));
-  if (payLinkSnap.exists()) {
-    const d = payLinkSnap.data();
+  // Try pay_links first (store checkout) using admin SDK
+  const payLinkSnap = await adminDb.collection("pay_links").doc(id).get();
+  if (payLinkSnap.exists) {
+    const d = payLinkSnap.data()!;
     return {
       id,
       walletAddress: d.walletAddress,
@@ -52,8 +53,9 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
       txSignature: d.txSignature,
     } as PaymentRequest;
   }
-  const snap = await getDoc(doc(db, "payments", id));
-  if (!snap.exists()) return null;
+  // Fall back to payments collection
+  const snap = await adminDb.collection("payments").doc(id).get();
+  if (!snap.exists) return null;
   return snap.data() as PaymentRequest;
 }
 
