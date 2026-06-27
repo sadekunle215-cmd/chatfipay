@@ -3,62 +3,69 @@ import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
 
-// POST /api/store/[slug]/charge — public checkout endpoint, no API key needed
-// Accepts either a single { productId, quantity } (legacy) or { items: [{ productId, quantity }] } (cart)
-export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+async function getNgnPerUsdc(): Promise<number> {
+  try {
+    // Try exchangerate-api first
+    const fxRes = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+    const fxData = await fxRes.json();
+    const usdNgn = fxData?.rates?.NGN;
+    if (usdNgn && usdNgn > 100) return usdNgn; // USDC ≈ 1 USD
+  } catch {}
+
+  try {
+    // Fallback: open.er-api.com
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    const usdNgn = data?.rates?.NGN;
+    if (usdNgn && usdNgn > 100) return usdNgn;
+  } catch {}
+
+  try {
+    // Fallback: frankfurter
+    const res = await fetch('https://api.frankfurter.app/latest?from=USD&to=NGN');
+    const data = await res.json();
+    const usdNgn = data?.rates?.NGN;
+    if (usdNgn && usdNgn > 100) return usdNgn;
+  } catch {}
+
+  // Last resort fallback
+  return 1600;
+}
+
+export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
+  const { slug } = params;
 
   try {
     const body = await req.json();
-    const { buyerName, buyerPhone, buyerAddress, buyerEmail, buyerWallet } = body;
+    const { productId, buyerEmail, buyerWallet, buyerDelivery } = body;
 
-    let items: { productId: string; quantity: number }[] = body.items;
-    if (!items && body.productId) {
-      items = [{ productId: body.productId, quantity: body.quantity || 1 }];
-    }
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json({ error: "Missing items" }, { status: 400 });
-    }
-    if (!buyerName || !buyerPhone || !buyerAddress) {
-      return NextResponse.json({ error: "Name, phone, and address are required" }, { status: 400 });
-    }
+    if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
     const storeSnap = await db.collection("stores").doc(slug).get();
     if (!storeSnap.exists) return NextResponse.json({ error: "Store not found" }, { status: 404 });
     const store = storeSnap.data()!;
     if (!store.live) return NextResponse.json({ error: "Store is offline" }, { status: 403 });
 
-    let amount = 0;
-    const lineItems: { productId: string; productName: string; quantity: number; price: number }[] = [];
+    const productSnap = await db.collection("stores").doc(slug).collection("products").doc(productId).get();
+    if (!productSnap.exists) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    const product = productSnap.data()!;
+    if (!product.active) return NextResponse.json({ error: "Product unavailable" }, { status: 400 });
 
-    for (const it of items) {
-      const qty = Math.max(1, parseInt(String(it.quantity), 10) || 1);
-      const productSnap = await db.collection("stores").doc(slug).collection("products").doc(it.productId).get();
-      if (!productSnap.exists) return NextResponse.json({ error: `Product not found: ${it.productId}` }, { status: 404 });
-      const product = productSnap.data()!;
-      if (!product.active) return NextResponse.json({ error: `Product unavailable: ${product.name}` }, { status: 400 });
-      if (product.stock !== null && product.stock !== undefined && qty > product.stock) {
-        return NextResponse.json({ error: `Only ${product.stock} left of ${product.name}` }, { status: 400 });
-      }
-      amount += product.price * qty;
-      lineItems.push({ productId: it.productId, productName: product.name, quantity: qty, price: product.price });
-    }
+    // Live NGN → USDC conversion
+    const ngnPerUsdc = await getNgnPerUsdc();
+    const amountUsdc = Math.round((product.price / ngnPerUsdc) * 100) / 100;
 
     const orderId = crypto.randomBytes(8).toString("hex");
     const now = Timestamp.now();
     const expiresAt = Timestamp.fromMillis(now.toMillis() + 24 * 60 * 60000);
 
-    const label = lineItems.length === 1
-      ? `${lineItems[0].productName} x${lineItems[0].quantity}`
-      : `${lineItems.length} items`;
-
     const payLinkId = crypto.randomBytes(8).toString("hex");
     await db.collection("pay_links").doc(payLinkId).set({
       merchantId: slug,
       walletAddress: store.ownerWallet,
-      amount,
+      amount: amountUsdc,
       token: "USDC",
-      label,
+      label: `${product.name} x1`,
       memo: `Order ${orderId} - ${store.name}`,
       status: "pending",
       storeOrder: true,
@@ -71,17 +78,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       txSignature: null,
       payerWallet: buyerWallet || null,
       receivedAmount: null,
+      buyerDelivery: buyerDelivery || null,
+      ngnPerUsdc,
     });
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({
       id: orderId,
-      items: lineItems,
-      amount,
-      buyerName,
-      buyerPhone,
-      buyerAddress,
-      buyerEmail: buyerEmail || null,
+      productId,
+      productName: product.name,
       buyerWallet: buyerWallet || null,
+      buyerEmail: buyerEmail || null,
+      buyerDelivery: buyerDelivery || null,
+      amount: product.price,
+      amountUsdc,
+      ngnPerUsdc,
       status: "pending",
       paymentRef: payLinkId,
       chatfiPaySlug: payLinkId,
@@ -95,8 +105,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       success: true,
       orderId,
       paymentLink: `https://pay.chatfi.pro/pay/${payLinkId}`,
-      amount,
-      items: lineItems,
+      amountNgn: product.price,
+      amountUsdc,
+      ngnPerUsdc,
+      product: product.name,
       status: "pending",
       expiresAt: expiresAt.toDate().toISOString(),
     });
