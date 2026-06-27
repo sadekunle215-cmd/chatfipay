@@ -36,6 +36,22 @@ export async function createPaymentRequest(
 }
 
 export async function getPaymentRequest(id: string): Promise<PaymentRequest | null> {
+  // Try pay_links first (store checkout), then fall back to payments (direct pay links)
+  const payLinkSnap = await getDoc(doc(db, "pay_links", id));
+  if (payLinkSnap.exists()) {
+    const d = payLinkSnap.data();
+    return {
+      id,
+      walletAddress: d.walletAddress,
+      amount: d.amount,
+      label: d.label,
+      memo: d.memo,
+      status: d.status,
+      createdAt: d.createdAt,
+      paidAt: d.paidAt,
+      txSignature: d.txSignature,
+    } as PaymentRequest;
+  }
   const snap = await getDoc(doc(db, "payments", id));
   if (!snap.exists()) return null;
   return snap.data() as PaymentRequest;
