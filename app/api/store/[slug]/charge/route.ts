@@ -75,6 +75,7 @@ export async function POST(
       receivedAmount: null,
       buyerDelivery: buyerDelivery || null,
       ngnPerUsdc,
+      ngnAmount: product.price,
     });
 
     await db.collection("stores").doc(slug).collection("orders").doc(orderId).set({

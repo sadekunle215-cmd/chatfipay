@@ -4,6 +4,7 @@ export interface PaymentRequest {
   id: string;
   walletAddress: string;
   amount: number | null;
+  token: string;
   label: string;
   memo: string;
   status: "pending" | "completed" | "cancelled";
@@ -21,17 +22,20 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
       id,
       walletAddress: d.walletAddress,
       amount: d.amount,
+      token: d.token || "SOL",
       label: d.label,
       memo: d.memo,
       status: d.status,
       createdAt: d.createdAt,
       paidAt: d.paidAt,
       txSignature: d.txSignature,
+      ngnAmount: d.ngnAmount || null,
     } as PaymentRequest;
   }
   const snap = await db.collection("payments").doc(id).get();
   if (!snap.exists) return null;
-  return snap.data() as PaymentRequest;
+  const d = snap.data()!;
+  return { ...d, token: d.token || "SOL" } as PaymentRequest;
 }
 
 export async function markPaymentComplete(
