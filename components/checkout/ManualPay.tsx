@@ -68,24 +68,43 @@ const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
       )}
 
       {/* QR */}
-      <div className="border border-[#C7F284] rounded-2xl p-4 bg-[#141414]">
-        <img src={qrUrl} alt="Wallet QR" width={180} height={180} />
+      <div className="relative border border-[#C7F284] rounded-2xl p-4 bg-[#141414]">
+        <img
+          src={qrUrl}
+          alt="Wallet QR"
+          width={180}
+          height={180}
+          className={selectedToken.symbol === 'SOL' ? 'opacity-20 pointer-events-none' : ''}
+        />
+        {selectedToken.symbol === 'SOL' && (
+          <div className="absolute inset-0 flex items-center justify-center px-4">
+            <p className="text-gray-400 text-xs text-center">Not available for SOL</p>
+          </div>
+        )}
       </div>
 
       {/* Address */}
       <div className="w-full bg-[#1A1A1A] rounded-xl p-4 flex items-center gap-3">
-        <p className="text-gray-300 text-xs font-mono tracking-wide flex-1 break-all">{walletAddress}</p>
-        <button onClick={copy} className="shrink-0">
-          {copied
-            ? <Check size={18} className="text-[#C7F284]" />
-            : <Copy size={18} className="text-gray-400" />
-          }
-        </button>
+        {selectedToken.symbol === 'SOL' ? (
+          <p className="text-gray-500 text-xs flex-1 text-center">Not available for SOL</p>
+        ) : (
+          <>
+            <p className="text-gray-300 text-xs font-mono tracking-wide flex-1 break-all">{walletAddress}</p>
+            <button onClick={copy} className="shrink-0">
+              {copied
+                ? <Check size={18} className="text-[#C7F284]" />
+                : <Copy size={18} className="text-gray-400" />
+              }
+            </button>
+          </>
+        )}
       </div>
 
-      <p className="text-gray-600 text-xs text-center px-2">
-        Send {selectedToken.symbol === 'SOL' ? token : selectedToken.symbol} to the address above from any wallet or exchange on Solana.
-      </p>
+      {selectedToken.symbol !== 'SOL' && (
+        <p className="text-gray-600 text-xs text-center px-2">
+          Send {selectedToken.symbol} to the address above from any wallet or exchange on Solana.
+        </p>
+      )}
     </div>
   );
 };
