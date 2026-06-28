@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       apiKeyPrefix = keySnap.data()!.apiKeyPrefix;
     }
 
-    await db.collection("stores").doc(username).set({
+    const storeUpdate: any = {
       username,
       ownerWallet,
       name: name || "",
@@ -93,13 +93,24 @@ export async function POST(req: NextRequest) {
       banner: banner || "",
       favicon: favicon || "",
       category: category || "",
-      theme: theme || { primary: "#9945FF", bg: "#000000" },
       contact: contact || {},
-      template: body.template || 'dark',
-      live: false,
       updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    }, { merge: true });
+    };
+
+    if (theme) storeUpdate.theme = theme;
+    if (body.template) storeUpdate.template = body.template;
+
+    if (isNewStore) {
+      // Only apply these defaults when the store is first created.
+      // On edits, omit them entirely so merge:true preserves whatever is already saved
+      // (otherwise every edit would silently reset the live toggle and template/theme).
+      if (!theme) storeUpdate.theme = { primary: "#9945FF", bg: "#000000" };
+      if (!body.template) storeUpdate.template = 'dark';
+      storeUpdate.live = false;
+      storeUpdate.createdAt = new Date().toISOString();
+    }
+
+    await db.collection("stores").doc(username).set(storeUpdate, { merge: true });
 
     await db.collection("storeUsernames").doc(username).set({ username, ownerWallet });
 
