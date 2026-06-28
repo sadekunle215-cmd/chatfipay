@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     id: id,
-    link: "https://chatfipay-z9xh.vercel.app/pay/" + id,
+    link: "https://pay.chatfi.pro/pay/" + id,
     amount: amount != null ? amount : null,
     token: token,
     label: label || null,

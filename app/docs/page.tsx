@@ -1,6 +1,6 @@
 import React from "react";
 
-const BASE = "https://chatfipay-z9xh.vercel.app/api";
+const BASE = "https://pay.chatfi.pro/api";
 
 export default function DocsPage() {
   return (
@@ -83,7 +83,7 @@ Content-Type: application/json`}</Pre>
             <Pre>{`{
   "success": true,
   "id": "abc123",
-  "link": "https://chatfipay-z9xh.vercel.app/pay/abc123",
+  "link": "https://pay.chatfi.pro/pay/abc123",
   "amount": 0.05,
   "label": "Invoice #001",
   "status": "pending"
