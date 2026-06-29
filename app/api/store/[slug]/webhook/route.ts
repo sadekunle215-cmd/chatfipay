@@ -69,6 +69,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       await custRef.set(custUpdate, { merge: true });
     }
 
+    // Update store-level stats (analytics)
+    const dayKey = now.toDate().toISOString().slice(0, 10); // YYYY-MM-DD
+    await db.collection("stores").doc(slug).collection("stats").doc("summary").set({
+      totalRevenue: FieldValue.increment(order.amount || 0),
+      totalOrders: FieldValue.increment(1),
+    }, { merge: true });
+    await db.collection("stores").doc(slug).collection("dailyStats").doc(dayKey).set({
+      date: dayKey,
+      revenue: FieldValue.increment(order.amount || 0),
+      orders: FieldValue.increment(1),
+    }, { merge: true });
+
     // Support both the current multi-item `items` array and legacy single-product orders
     const lineItems: { productId: string; quantity: number }[] = Array.isArray(order.items) && order.items.length > 0
       ? order.items.map((it: any) => ({ productId: it.productId, quantity: it.quantity || 1 }))
@@ -83,10 +95,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       if (!productSnap.exists) continue;
 
       const product = productSnap.data()!;
-      if (product.stock == null) continue; // unlimited stock, nothing to deduct
+      if (product.stock == null) {
+        await productRef.update({ unitsSold: FieldValue.increment(item.quantity) });
+        continue; // unlimited stock, nothing to deduct
+      }
 
       const newStock = Math.max(0, product.stock - item.quantity);
-      const update: any = { stock: FieldValue.increment(-Math.min(item.quantity, product.stock)) };
+      const update: any = { stock: FieldValue.increment(-Math.min(item.quantity, product.stock)), unitsSold: FieldValue.increment(item.quantity) };
       if (newStock === 0) update.active = false;
       await productRef.update(update);
     }
