@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Copy, Check } from "lucide-react";
 
 const TOKENS = [
@@ -12,10 +12,39 @@ interface Props {
   walletAddress: string;
   amount: number | null;
   token?: string;
+  paymentId?: string;
 }
 
-const ManualPay = ({ walletAddress, amount, token = "USDC" }: Props) => {
+const ManualPay = ({ walletAddress, amount, token = "USDC", paymentId }: Props) => {
   const [copied, setCopied] = useState(false);
+  const [paid, setPaid] = useState(false);
+
+  useEffect(() => {
+    if (!paymentId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/verify/${paymentId}`);
+        const data = await res.json();
+        if (data.status === "completed") {
+          setPaid(true);
+          clearInterval(interval);
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [paymentId]);
+
+  if (paid) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-8 text-center">
+        <div className="w-16 h-16 rounded-full bg-[#C7F284]/10 border border-[#C7F284]/30 flex items-center justify-center">
+          <Check size={32} className="text-[#C7F284]" />
+        </div>
+        <p className="text-[#C7F284] text-xl font-bold">Payment Received!</p>
+        <p className="text-gray-400 text-sm">Your order has been confirmed.</p>
+      </div>
+    );
+  }
   const defaultToken = TOKENS.find(t => t.symbol === token) || TOKENS[0];
   const [selectedToken, setSelectedToken] = useState(defaultToken);
 

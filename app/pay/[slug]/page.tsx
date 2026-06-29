@@ -97,6 +97,7 @@ export default async function PayPage({ params }: Props) {
                   walletAddress={payment.walletAddress}
                   amount={payment.amount}
                   token={payment.token}
+                  paymentId={slug}
                 />
               </PayTabs>
             </div>

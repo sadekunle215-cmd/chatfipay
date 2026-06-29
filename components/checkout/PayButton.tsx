@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { buildSolanaPayUrl } from "@/lib/solanaPay";
 
 interface PayButtonProps {
@@ -10,8 +10,38 @@ interface PayButtonProps {
   token?: string;
 }
 
+import { Check } from "lucide-react";
+
 const PayButton = ({ paymentId, walletAddress, amount, label, token = "SOL" }: PayButtonProps) => {
   const [status, setStatus] = useState<"idle" | "paying">("idle");
+  const [paid, setPaid] = useState(false);
+
+  useEffect(() => {
+    if (status !== "paying") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/verify/${paymentId}`);
+        const data = await res.json();
+        if (data.status === "completed") {
+          setPaid(true);
+          clearInterval(interval);
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [status, paymentId]);
+
+  if (paid) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-4 text-center">
+        <div className="w-16 h-16 rounded-full bg-[#C7F284]/10 border border-[#C7F284]/30 flex items-center justify-center">
+          <Check size={32} className="text-[#C7F284]" />
+        </div>
+        <p className="text-[#C7F284] text-xl font-bold">Payment Received!</p>
+        <p className="text-gray-400 text-sm">Your order has been confirmed.</p>
+      </div>
+    );
+  }
 
   const handlePay = () => {
     const url = buildSolanaPayUrl({
