@@ -90,11 +90,19 @@ export async function GET(
     const expectedMint = payment.token === "USDT" ? USDT_MINT : USDC_MINT;
     const expectedAmount = payment.amount ? payment.amount : null;
 
-    const createdAtMs = payment.createdAt?.toMillis
-      ? payment.createdAt.toMillis()
-      : typeof payment.createdAt === "string"
-      ? new Date(payment.createdAt).getTime()
-      : Date.now() - 86400000;
+    // Handle both admin SDK (_seconds) and client SDK (toMillis) Timestamps
+    let createdAtMs: number;
+    if (payment.createdAt?.toMillis) {
+      createdAtMs = payment.createdAt.toMillis();
+    } else if (payment.createdAt?._seconds) {
+      createdAtMs = payment.createdAt._seconds * 1000;
+    } else if (payment.createdAt?.seconds) {
+      createdAtMs = payment.createdAt.seconds * 1000;
+    } else if (typeof payment.createdAt === "string") {
+      createdAtMs = new Date(payment.createdAt).getTime();
+    } else {
+      createdAtMs = Date.now() - 300000; // fallback: 5 mins ago
+    }
 
     // Use Helius Enhanced Transactions API — parses token transfers automatically
     const heliusRes = await fetch(
@@ -107,9 +115,9 @@ export async function GET(
     }
 
     for (const tx of txList) {
-      // Skip txs more than 24h before payment was created
+      // Only check txs after payment was created
       const txTime = (tx.timestamp || 0) * 1000;
-      if (txTime < createdAtMs - 86400000) continue;
+      if (txTime < createdAtMs) continue;
       if (tx.transactionError) continue;
 
       // Check tokenTransfers array — Helius parses these cleanly

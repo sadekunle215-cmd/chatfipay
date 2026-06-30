@@ -137,7 +137,7 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "USDC", st
             <a
               key={wallet.scheme}
               href={buildWalletUrl(wallet.scheme, solanaPayUrl)}
-              onClick={() => { setPolling(true); setShowWallets(false); }}
+              onClick={() => { setTimeout(() => setPolling(true), 10000); setShowWallets(false); }}
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all"
             >
               <img
@@ -155,7 +155,7 @@ const PayButton = ({ paymentId, walletAddress, amount, label, token = "USDC", st
           {/* Universal fallback */}
           <a
             href={solanaPayUrl}
-            onClick={() => { setPolling(true); setShowWallets(false); }}
+            onClick={() => { setTimeout(() => setPolling(true), 10000); setShowWallets(false); }}
             className="flex items-center gap-3 p-3 rounded-lg hover:bg-[#222] transition-all border-t border-[#2A2A2A] mt-1 pt-3"
           >
             <div className="w-7 h-7 rounded-lg bg-[#C7F284]/10 flex items-center justify-center text-[#C7F284] text-xs font-bold">◎</div>
