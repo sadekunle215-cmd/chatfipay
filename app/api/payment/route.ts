@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebaseAdmin";
 import { Timestamp } from "firebase-admin/firestore";
 import crypto from "crypto";
+import { derivePaymentAddress } from "@/lib/derivedWallet";
+import { fundDepositAddress } from "@/lib/fundDeposit";
 
 const VALID_TOKENS = ["SOL", "USDC", "USDT"];
 const DEFAULT_EXPIRY_MINUTES = 60 * 24;
@@ -57,9 +59,17 @@ export async function POST(req: NextRequest) {
     now.toMillis() + (expiresInMinutes || DEFAULT_EXPIRY_MINUTES) * 60000
   );
 
+  const depositAddress = derivePaymentAddress(id);
+  try {
+    await fundDepositAddress(depositAddress);
+  } catch (e) {
+    console.error("Failed to fund deposit address (sweep will fail later):", e);
+  }
+
   const paymentDoc = {
     merchantId: merchant.id,
-    walletAddress: merchant.walletAddress,
+    walletAddress: depositAddress,
+    merchantWallet: merchant.walletAddress,
     amount: amount != null ? amount : null,
     token: token,
     label: label || null,
