@@ -89,6 +89,7 @@ export default async function PayPage({ params }: Props) {
                       amount={payment.amount}
                       label={payment.label}
                       token={payment.token}
+                      storeUsername={(payment as any).storeSlug}
                     />
                   </div>
                 </div>
@@ -98,6 +99,7 @@ export default async function PayPage({ params }: Props) {
                   amount={payment.amount}
                   token={payment.token}
                   paymentId={slug}
+                  storeUsername={(payment as any).storeSlug}
                 />
               </PayTabs>
             </div>

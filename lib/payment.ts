@@ -12,6 +12,7 @@ export interface PaymentRequest {
   paidAt?: any;
   paidBy?: string;
   txSignature?: string;
+  storeSlug?: string;
 }
 
 export async function getPaymentRequest(id: string): Promise<PaymentRequest | null> {
@@ -30,6 +31,7 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
       paidAt: d.paidAt,
       txSignature: d.txSignature,
       ngnAmount: d.ngnAmount || null,
+      storeSlug: d.storeSlug || null,
     } as PaymentRequest;
   }
   const snap = await db.collection("payments").doc(id).get();

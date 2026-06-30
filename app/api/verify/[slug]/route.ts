@@ -93,14 +93,29 @@ export async function GET(
         jsonrpc: "2.0",
         id: 1,
         method: "getSignaturesForAddress",
-        params: [payment.walletAddress, { limit: 10 }],
+        params: [payment.walletAddress, { limit: 20 }],
       }),
     });
 
     const data = await res.json();
     const signatures = data.result || [];
 
+    // Only check transactions after payment was created
+    const createdAtMs = payment.createdAt?.toMillis
+      ? payment.createdAt.toMillis()
+      : typeof payment.createdAt === "string"
+      ? new Date(payment.createdAt).getTime()
+      : Date.now() - 86400000;
+
+    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+    const expectedMint = payment.token === "USDT" ? USDT_MINT : USDC_MINT;
+    const expectedAmount = payment.amount ? Math.round(payment.amount * 1_000_000) : null;
+
     for (const sig of signatures) {
+      // Skip txs before payment was created
+      if (sig.blockTime && sig.blockTime * 1000 < createdAtMs) continue;
+
       const txRes = await fetch(rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -117,11 +132,51 @@ export async function GET(
       if (!tx) continue;
 
       const accounts = tx.transaction?.message?.accountKeys || [];
+      const instructions = tx.transaction?.message?.instructions || [];
+      const innerInstructions = tx.meta?.innerInstructions || [];
+
+      // Check for reference key match (Solana Pay standard)
       const hasReference = accounts.some((a: any) => a.pubkey === slug);
 
-      if (hasReference) {
+      // Check for USDC/USDT transfer to merchant wallet
+      let hasTokenTransfer = false;
+      const allInstructions = [
+        ...instructions,
+        ...innerInstructions.flatMap((ii: any) => ii.instructions || []),
+      ];
+      for (const ix of allInstructions) {
+        const parsed = ix.parsed;
+        if (!parsed) continue;
+        const type = parsed.type;
+        const info = parsed.info || {};
+        if (
+          (type === "transfer" || type === "transferChecked") &&
+          info.mint === expectedMint &&
+          info.destination &&
+          accounts.some((a: any) => a.pubkey === payment.walletAddress) &&
+          (!expectedAmount || Math.abs((info.tokenAmount?.amount || info.amount || 0) - expectedAmount) < 10000)
+        ) {
+          hasTokenTransfer = true;
+          break;
+        }
+      }
+
+      // Also check SOL transfer if token is SOL
+      let hasSolTransfer = false;
+      if (payment.token === "SOL" && expectedAmount) {
+        const postBalances = tx.meta?.postBalances || [];
+        const preBalances = tx.meta?.preBalances || [];
+        const merchantIdx = accounts.findIndex((a: any) => a.pubkey === payment.walletAddress);
+        if (merchantIdx >= 0) {
+          const received = (postBalances[merchantIdx] || 0) - (preBalances[merchantIdx] || 0);
+          if (received > 0) hasSolTransfer = true;
+        }
+      }
+
+      if (hasReference || hasTokenTransfer || hasSolTransfer) {
         const paidBy = accounts[0]?.pubkey || "unknown";
         await markPaymentComplete(slug, paidBy, sig.signature);
+
 
         const merchant = await getMerchantData(payment.walletAddress);
 
