@@ -43,10 +43,17 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
 export async function markPaymentComplete(
   id: string, paidBy: string, txSignature: string
 ): Promise<void> {
-  await db.collection("payments").doc(id).update({
+  const update = {
     status: "completed",
     paidBy,
     txSignature,
     paidAt: new Date().toISOString(),
-  });
+  };
+  // Check which collection this payment is in
+  const payLinkSnap = await db.collection("pay_links").doc(id).get();
+  if (payLinkSnap.exists) {
+    await db.collection("pay_links").doc(id).update(update);
+  } else {
+    await db.collection("payments").doc(id).update(update);
+  }
 }
