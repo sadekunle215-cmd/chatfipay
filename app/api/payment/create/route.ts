@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       id, walletAddress: depositAddress,
       merchantWallet: walletAddress,
       amount: amount || null,
+      token: "USDC",
       label: label || null,
       memo: memo || null,
       status: "pending",
