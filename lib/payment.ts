@@ -53,6 +53,20 @@ export async function markPaymentComplete(
   const payLinkSnap = await db.collection("pay_links").doc(id).get();
   if (payLinkSnap.exists) {
     await db.collection("pay_links").doc(id).update(update);
+    // Also update the store order if this is a store payment
+    const payLinkData = payLinkSnap.data();
+    if (payLinkData?.storeOrder && payLinkData?.storeSlug && payLinkData?.orderId) {
+      await db.collection("stores")
+        .doc(payLinkData.storeSlug)
+        .collection("orders")
+        .doc(payLinkData.orderId)
+        .update({
+          status: "paid",
+          paidAt: new Date().toISOString(),
+          txSignature,
+          paidBy,
+        });
+    }
   } else {
     await db.collection("payments").doc(id).update(update);
   }
