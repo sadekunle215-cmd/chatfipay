@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
     const customer = custSnap.data()!;
 
     const ordersSnap = await db.collection("stores").doc(slug).collection("orders")
-      .where("buyerPhoneNormalized", "==", phone)
+      .where("customerKey", "==", phone)
       .orderBy("createdAt", "desc")
       .limit(100)
       .get();

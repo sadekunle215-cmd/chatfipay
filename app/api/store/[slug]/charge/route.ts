@@ -35,7 +35,7 @@ export async function POST(
 
   try {
     const body = await req.json();
-    const { productId, buyerEmail, buyerWallet, buyerDelivery } = body;
+    const { productId, buyerEmail, buyerPhone, buyerName, buyerWallet, buyerDelivery } = body;
 
     if (!productId) return NextResponse.json({ error: "Missing productId" }, { status: 400 });
 
@@ -95,6 +95,8 @@ export async function POST(
       productName: product.name,
       buyerWallet: buyerWallet || null,
       buyerEmail: buyerEmail || null,
+      buyerPhone: buyerPhone || null,
+      buyerName: buyerName || null,
       buyerDelivery: buyerDelivery || null,
       amount: product.price,
       amountUsdc,

@@ -11,6 +11,12 @@ function normalizePhone(raw: string | null | undefined): string | null {
   return digits;
 }
 
+function normalizeEmail(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim().toLowerCase();
+  return trimmed || null;
+}
+
 // POST /api/store/[slug]/webhook — called by ChatFi Pay on payment confirmed
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -33,6 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
     }
 
     const normalizedPhone = normalizePhone(order.buyerPhone);
+    const normalizedEmail = normalizeEmail(order.buyerEmail);
+    const customerKey = normalizedPhone || normalizedEmail;
 
     await orderRef.update({
       status: "paid",
@@ -41,6 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       payerWallet: payerWallet || null,
       paidAt: now,
       buyerPhoneNormalized: normalizedPhone,
+      buyerEmailNormalized: normalizedEmail,
+      customerKey,
     });
 
     if (order.paymentRef) {
@@ -52,15 +62,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
       });
     }
 
-    // Upsert the customer record (CRM)
-    if (normalizedPhone) {
-      const custRef = db.collection("stores").doc(slug).collection("customers").doc(normalizedPhone);
+    // Upsert the customer record (CRM) — keyed on phone when available, else email
+    if (customerKey) {
+      const custRef = db.collection("stores").doc(slug).collection("customers").doc(customerKey);
       const custSnap = await custRef.get();
       const custUpdate: any = {
-        phone: order.buyerPhone,
+        phone: order.buyerPhone || null,
         name: order.buyerName || null,
         email: order.buyerEmail || null,
-        address: order.buyerAddress || null,
+        address: order.buyerAddress || order.buyerDelivery || null,
         totalSpent: FieldValue.increment(order.amount || 0),
         orderCount: FieldValue.increment(1),
         lastOrderAt: now,
