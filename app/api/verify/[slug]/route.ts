@@ -132,7 +132,32 @@ export async function GET(
           const txSignature = tx.signature;
           const paidBy = tx.feePayer || "unknown";
 
-          await markPaymentComplete(slug, paidBy, txSignature);
+          if (payment.storeOrder && payment.storeSlug && payment.orderId) {
+            // Store order: delegate to the canonical store webhook so CRM/stats/stock
+            // logic runs the same way it does for NGN payments (fixes USDC orders never
+            // updating Analytics/Customers).
+            await updateDoc(doc(db, "pay_links", slug), {
+              status: "completed",
+              paidBy,
+              txSignature,
+              paidAt: new Date().toISOString(),
+            });
+            const webhookRes = await fetch(`https://pay.chatfi.pro/api/store/${payment.storeSlug}/webhook`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                orderId: payment.orderId,
+                txSignature,
+                receivedAmount: expectedAmount,
+                payerWallet: paidBy,
+              }),
+            });
+            if (!webhookRes.ok) {
+              console.error("Store webhook call failed for order", payment.orderId, await webhookRes.text());
+            }
+          } else {
+            await markPaymentComplete(slug, paidBy, txSignature);
+          }
 
           if (payment.merchantWallet) {
             try {
@@ -176,7 +201,29 @@ export async function GET(
           ) {
             const txSignature = tx.signature;
             const paidBy = tx.feePayer || "unknown";
-            await markPaymentComplete(slug, paidBy, txSignature);
+            if (payment.storeOrder && payment.storeSlug && payment.orderId) {
+              await updateDoc(doc(db, "pay_links", slug), {
+                status: "completed",
+                paidBy,
+                txSignature,
+                paidAt: new Date().toISOString(),
+              });
+              const webhookRes = await fetch(`https://pay.chatfi.pro/api/store/${payment.storeSlug}/webhook`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  orderId: payment.orderId,
+                  txSignature,
+                  receivedAmount: payment.amount,
+                  payerWallet: paidBy,
+                }),
+              });
+              if (!webhookRes.ok) {
+                console.error("Store webhook call failed for order", payment.orderId, await webhookRes.text());
+              }
+            } else {
+              await markPaymentComplete(slug, paidBy, txSignature);
+            }
             const merchant = await getMerchantData(payment.walletAddress);
             if (merchant?.expoPushToken) {
               await sendPushNotification(merchant.expoPushToken, payment.amount, payment.label);
